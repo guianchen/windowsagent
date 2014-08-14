@@ -3,7 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
+	"strconv"
+	//"fmt"
 	"github.com/codegangsta/martini"
 	"log"
 	"net/http"
@@ -31,9 +32,24 @@ func init() {
 	r.Get("/execute", execute)
 	r.Get("/session", sessionList)
 	r.Post("/session", sessionNew)
+	r.Delete("/session", sessionDelete)
 
 	// Add the router action
 	m.Action(r.Handle)
+}
+
+func sessionDelete(w http.ResponseWriter, r *http.Request) []byte {
+	sessionId := r.FormValue("id")
+	if sessionId == "" {
+		return jsonify("ID field can not be empty")
+	}
+	id, err := strconv.Atoi(sessionId)
+	if err != nil {
+		log.Panic(err)
+		return jsonify("ID field can not be parsed")
+	}
+	delete(sessions, id)
+	return jsonify(true)
 }
 
 func sessionNew(w http.ResponseWriter, r *http.Request) []byte {
@@ -44,9 +60,10 @@ func sessionNew(w http.ResponseWriter, r *http.Request) []byte {
 }
 
 func sessionList(w http.ResponseWriter, r *http.Request) []byte {
-	result := []string{}
-	for k, v := range sessions {
-		result = append(result, fmt.Sprintf("%d:%s", k, v.name))
+	result := []map[string]interface{}{}
+	for _, session := range sessions {
+		sessionData := map[string]interface{}{"id": session.id, "name": session.name, "workingpath": session.workingPath, "type": session.cmdType, "env": session.env}
+		result = append(result, sessionData)
 	}
 	return jsonify(result)
 }
