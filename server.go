@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	//"fmt"
+	"fmt"
 	"github.com/codegangsta/martini"
 	"log"
 	"net/http"
@@ -13,6 +13,7 @@ import (
 )
 
 var m *martini.Martini
+var sessions = make(map[int]*Session)
 
 func init() {
 	m = martini.New()
@@ -28,9 +29,44 @@ func init() {
 	// Setup routes
 	r := martini.NewRouter()
 	r.Get("/execute", execute)
+	r.Get("/session", sessionList)
+	r.Post("/session", sessionNew)
 
 	// Add the router action
 	m.Action(r.Handle)
+}
+
+func sessionNew(w http.ResponseWriter, r *http.Request) []byte {
+	env := jsonList(r.FormValue("env"))
+	session := NewSession(r.FormValue("name"), r.FormValue("type"), r.FormValue("workingpath"), env)
+	sessions[session.id] = session
+	return jsonify(session.id)
+}
+
+func sessionList(w http.ResponseWriter, r *http.Request) []byte {
+	result := []string{}
+	for k, v := range sessions {
+		result = append(result, fmt.Sprintf("%d:%s", k, v.name))
+	}
+	return jsonify(result)
+}
+
+func jsonify(data interface{}) []byte {
+	result, err := json.Marshal(data)
+	if err != nil {
+		log.Panic(err)
+	}
+	return result
+}
+
+func jsonList(data string) []string {
+	result := []string{}
+	if data != "" {
+		if err := json.Unmarshal([]byte(data), &result); err != nil {
+			log.Panic(err)
+		}
+	}
+	return result
 }
 
 func execute(w http.ResponseWriter, r *http.Request) (string, int) {
@@ -48,26 +84,15 @@ func execute(w http.ResponseWriter, r *http.Request) (string, int) {
 	if pscmd != "" {
 		cmdArgs = append(cmdArgs, pscmd)
 	}
-	if args != "" {
-		cmdArgs2 := []string{}
-		if err := json.Unmarshal([]byte(args), &cmdArgs2); err != nil {
-			log.Panic(err)
-			return err.Error(), 500
-		}
-		for _, v := range cmdArgs2 {
-			cmdArgs = append(cmdArgs, v)
-		}
+	cmdArgs2 := jsonList(args)
+	for _, v := range cmdArgs2 {
+		cmdArgs = append(cmdArgs, v)
+		command.Args = cmdArgs
 	}
-	command.Args = cmdArgs
 
-	if env != "" {
-		envVars := []string{}
-		if err := json.Unmarshal([]byte(env), &envVars); err != nil {
-			log.Panic(err)
-			return err.Error(), 500
-		}
-		command.Env = envVars
-	}
+	envVars := jsonList(env)
+	command.Env = envVars
+
 	var out bytes.Buffer
 	command.Stdout = &out
 	command.Dir = workingPath
@@ -75,6 +100,7 @@ func execute(w http.ResponseWriter, r *http.Request) (string, int) {
 		log.Panic(err.Error() + ": " + out.String())
 		return err.Error() + ": " + out.String(), 500
 	}
+
 	return out.String(), 200
 }
 
