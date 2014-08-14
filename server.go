@@ -29,6 +29,7 @@ func init() {
 
 	// Setup routes
 	r := martini.NewRouter()
+	r.Get("/execute", execute)
 	r.Get("/execute/:sid", execute)
 	r.Get("/session", sessionList)
 	r.Post("/session", sessionNew)
