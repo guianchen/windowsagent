@@ -29,7 +29,7 @@ func init() {
 
 	// Setup routes
 	r := martini.NewRouter()
-	r.Get("/execute", execute)
+	r.Get("/execute/:sid", execute)
 	r.Get("/session", sessionList)
 	r.Post("/session", sessionNew)
 	r.Delete("/session", sessionDelete)
@@ -86,8 +86,13 @@ func jsonList(data string) []string {
 	return result
 }
 
-func execute(w http.ResponseWriter, r *http.Request) (string, int) {
+func execute(w http.ResponseWriter, r *http.Request, parms martini.Params) (string, int) {
 	workingPath, cmd, args, env, cmdType := r.FormValue("workingpath"), r.FormValue("cmd"), r.FormValue("args"), r.FormValue("env"), r.FormValue("type")
+	sid, err := strconv.Atoi(parms["sid"])
+	if err == nil {
+		session := sessions[sid]
+		workingPath, env, cmdType = session.workingPath, string(jsonify(session.env)), session.cmdType
+	}
 
 	var pscmd string
 	if cmdType == "ps" {
