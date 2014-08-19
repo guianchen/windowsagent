@@ -3,14 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"strconv"
-	//"fmt"
+	"fmt"
 	"github.com/codegangsta/martini"
 	"log"
 	"net/http"
 	"os/exec"
-	//"strings"
-	//"github.com/codegangsta/martini-contrib/auth"
+	"strconv"
 )
 
 var m *martini.Martini
@@ -18,14 +16,13 @@ var sessions = make(map[int]*Session)
 
 func init() {
 	m = martini.New()
+
 	// Setup middleware
 	m.Use(martini.Recovery())
 	m.Use(martini.Logger())
 	m.Use(func(c martini.Context, w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	})
-	//m.Use(auth.Basic(AuthToken, ""))
-	//m.Use(MapEncoder)
 
 	// Setup routes
 	r := martini.NewRouter()
@@ -88,7 +85,7 @@ func jsonList(data string) []string {
 }
 
 func execute(w http.ResponseWriter, r *http.Request, parms martini.Params) (string, int) {
-	workingPath, cmd, args, env, cmdType := r.FormValue("workingpath"), r.FormValue("cmd"), r.FormValue("args"), r.FormValue("env"), r.FormValue("type")
+	workingPath, cmd, args, env, cmdType, password := r.FormValue("workingpath"), r.FormValue("cmd"), r.FormValue("args"), r.FormValue("env"), r.FormValue("type"), r.FormValue("password")
 	sid, err := strconv.Atoi(parms["sid"])
 	if err == nil {
 		session := sessions[sid]
@@ -101,24 +98,38 @@ func execute(w http.ResponseWriter, r *http.Request, parms martini.Params) (stri
 		cmd = "powershell"
 	}
 
+	psScript := `$password = ConvertTo-SecureString -String "%s" -AsPlainText -Force;
+	$credentials = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList "Administrator", $password;
+	$job = Start-Job -Credential $credentials -ScriptBlock {%s};
+	Wait-Job -Job $job | Out-Null;
+	Receive-Job -Keep -Job $job;`
+
+	psScript = fmt.Sprintf(psScript, password, pscmd)
+
 	command := exec.Command(cmd)
+	command.Dir = workingPath
 
 	cmdArgs := []string{cmd}
 	if pscmd != "" {
-		cmdArgs = append(cmdArgs, pscmd)
+		cmdArgs = append(cmdArgs, "-Command")
+		if workingPath != "" {
+			psScript = fmt.Sprintf("Set-Location %s;\n", workingPath) + psScript
+		}
+		cmdArgs = append(cmdArgs, fmt.Sprintf("&{%s}", psScript))
 	}
 	cmdArgs2 := jsonList(args)
 	for _, v := range cmdArgs2 {
 		cmdArgs = append(cmdArgs, v)
-		command.Args = cmdArgs
 	}
+	command.Args = cmdArgs
 
-	envVars := jsonList(env)
-	command.Env = envVars
+	if env != "" {
+		envVars := jsonList(env)
+		command.Env = envVars
+	}
 
 	var out bytes.Buffer
 	command.Stdout = &out
-	command.Dir = workingPath
 	if err := command.Run(); err != nil {
 		log.Panic(err.Error() + ": " + out.String())
 		return err.Error() + ": " + out.String(), 500
