@@ -94,7 +94,11 @@ func execute(w http.ResponseWriter, r *http.Request, parms martini.Params) (stri
 
 	var pscmd string
 	if cmdType == "ps" {
-		pscmd = cmd
+		if workingPath != "" {
+			pscmd = fmt.Sprintf("Set-Location %s;\n", workingPath) + cmd
+		} else {
+			pscmd = cmd
+		}
 		cmd = "powershell"
 	}
 
@@ -112,9 +116,6 @@ func execute(w http.ResponseWriter, r *http.Request, parms martini.Params) (stri
 	cmdArgs := []string{cmd}
 	if pscmd != "" {
 		cmdArgs = append(cmdArgs, "-Command")
-		if workingPath != "" {
-			psScript = fmt.Sprintf("Set-Location %s;\n", workingPath) + psScript
-		}
 		cmdArgs = append(cmdArgs, fmt.Sprintf("&{%s}", psScript))
 	}
 	cmdArgs2 := jsonList(args)
