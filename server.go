@@ -125,7 +125,9 @@ func execute(w http.ResponseWriter, r *http.Request, parms martini.Params) (stri
 
 	if env != "" {
 		envVars := jsonList(env)
-		command.Env = envVars
+		if len(envVars) > 0 {
+			command.Env = envVars
+		}
 	}
 
 	var out bytes.Buffer
